@@ -25,6 +25,7 @@ import { cn } from './lib/utils';
 import { 
   AspectRatio, 
   StylePreset, 
+  QualityLevel,
   GraphicData, 
   PRESET_TEXTS, 
   PROMPT_TEMPLATES 
@@ -40,13 +41,36 @@ export default function App() {
     watermark: '@Nang&TheGioi',
     aspectRatio: '16:9',
     style: 'Bình thường',
+    quality: 'Standard',
     images: [],
     generatedBackground: null,
   });
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+
+  // Check for API key on mount
+  React.useEffect(() => {
+    const checkKey = async () => {
+      if (window.aistudio) {
+        const selected = await window.aistudio.hasSelectedApiKey();
+        setHasApiKey(selected);
+      } else {
+        // Fallback for local dev or if window.aistudio is missing
+        setHasApiKey(true);
+      }
+    };
+    checkKey();
+  }, []);
+
+  const handleSelectKey = async () => {
+    if (window.aistudio) {
+      await window.aistudio.openSelectKey();
+      setHasApiKey(true); // Assume success per instructions
+    }
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []) as File[];
@@ -79,6 +103,7 @@ export default function App() {
 
     try {
       console.log("Starting background generation...");
+      // Create a new instance right before the call to ensure up-to-date API key
       const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       // Step 1: Translate/Refine text and get visual context
@@ -126,18 +151,30 @@ export default function App() {
 
       const isNormalTemplate = selectedTemplate.name === 'Bình thường';
 
-      let promptText = `Generate a professional, high-contrast news background composition for a Vietnamese news channel. 
+      let promptText = `Generate a high-end, modern news background composition for a professional Vietnamese news channel.
+      
       Visual Style: ${selectedTemplate.prompt}.
-      Content Context: ${refined.visualDescription || data.headline}.
-      Layout style: ${data.images.length > 0 ? (isNormalTemplate ? 'Strictly maintain the original image composition, subjects, and details. Only enhance sharpness and brightness.' : (data.images.length > 1 ? 'Dynamic collage or blended composition of the provided images' : 'Single main visual based on the provided image')) : 'Cinematic professional news graphic from scratch'}.
+      Topic: ${refined.visualDescription || data.headline}.
       Atmosphere: ${getStyleDescription(data.style)}.
-      CRITICAL INSTRUCTIONS: 
-      1. Create a clean visual background ONLY. 
-      2. DO NOT include any text, letters, characters, or watermarks in the image. 
-      3. Ensure no English words or Latin characters appear in the background elements.
-      4. The composition should be cinematic and professional.
-      ${data.images.length > 0 ? (isNormalTemplate ? '5. DO NOT change the content of the provided image. Only make it sharper and brighter.' : '5. Use the provided images as the MAIN visual content, blending them seamlessly.') : '5. Since no images are provided, use Google Search to find accurate visual references for the topic and generate a realistic, high-quality news background.'}
-      6. The final image should look like a professional news graphic.`;
+      
+      COMPOSITION STRATEGY:
+      ${data.images.length > 0 
+        ? `1. MANDATORY: USE THE PROVIDED UPLOADED IMAGES AS THE PRIMARY VISUAL CONTENT. 
+           2. ${isNormalTemplate 
+              ? 'STRICT MODE: Maintain the original subjects and composition of the uploaded images, but enhance them to be significantly sharper, brighter, and more cinematic. Do not add new subjects.' 
+              : 'SMART BLEND MODE: Create a sophisticated, modern news collage or split-screen layout using the uploaded images. Blend them with professional geometric masks, subtle gradients, or modern glassmorphism effects.'}
+           3. Ensure the subjects (people, objects) in the images remain clear, recognizable, and high-fidelity.
+           4. DO NOT hallucinate new people or objects if they aren't in the images.
+           5. The background should feel like a high-budget news broadcast graphic.`
+        : `1. Since no images are provided, generate a cinematic, realistic news visual from scratch based on the topic.
+           2. Use a professional news studio or relevant location background.`
+      }
+
+      CRITICAL CONSTRAINTS:
+      - NO TEXT, NO LETTERS, NO NUMBERS, NO WATERMARKS in the generated image.
+      - The output must be a CLEAN background graphic ready for text overlay.
+      - Vietnamese news aesthetic: Professional, trustworthy, and high-energy.
+      - High contrast and vibrant colors matching the ${data.style} style.`;
       
       parts.push({ text: promptText });
 
@@ -153,13 +190,14 @@ export default function App() {
         });
       });
 
-      console.log("Generating image with Gemini 2.5 Flash Image...");
+      console.log(`Generating image with ${data.quality === 'Pro' ? 'Gemini 3.1' : 'Gemini 2.5'}...`);
       const response = await genAI.models.generateContent({
-        model: 'gemini-2.5-flash-image',
+        model: data.quality === 'Pro' ? 'gemini-3.1-flash-image-preview' : 'gemini-2.5-flash-image',
         contents: { parts },
         config: {
           imageConfig: {
             aspectRatio: data.aspectRatio === '16:9' ? '16:9' : data.aspectRatio === '4:5' ? '3:4' : '9:16',
+            imageSize: data.quality === 'Pro' ? "2K" : undefined
           }
         }
       });
@@ -182,7 +220,13 @@ export default function App() {
       }
     } catch (err: any) {
       console.error("Generation error:", err);
-      setError(`Có lỗi xảy ra: ${err.message || "Vui lòng thử lại."}`);
+      const errorMessage = err.message || "";
+      if (errorMessage.includes("permission") || errorMessage.includes("403") || errorMessage.includes("not found")) {
+        setError("Lỗi quyền truy cập: Vui lòng chọn lại API Key từ một dự án Google Cloud có trả phí.");
+        setHasApiKey(false); // Reset key state to show selection screen
+      } else {
+        setError(`Có lỗi xảy ra: ${errorMessage || "Vui lòng thử lại."}`);
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -272,10 +316,10 @@ export default function App() {
     const isPortrait = data.aspectRatio === '9:16';
     const isSquare = data.aspectRatio === '4:5';
     
-    // Base sizes
-    let headlineBase = isPortrait ? 28 : isSquare ? 32 : 42;
-    let sublineBase = isPortrait ? 16 : isSquare ? 18 : 24;
-    let bannerBase = isPortrait ? 18 : isSquare ? 22 : 28;
+    // Base sizes (relative to a 1000px wide container for calculation)
+    let headlineBase = isPortrait ? 50 : isSquare ? 45 : 42;
+    let sublineBase = isPortrait ? 24 : isSquare ? 22 : 20;
+    let bannerBase = isPortrait ? 28 : isSquare ? 26 : 24;
 
     // Adjust based on length (longer text = smaller font)
     const headlineLen = data.headline.length;
@@ -293,46 +337,82 @@ export default function App() {
     if (bannerLen > 20) bannerBase *= 0.8;
     else if (bannerLen > 15) bannerBase *= 0.9;
 
+    // Convert to cqw (Container Query Width) units
+    // 1cqw = 1% of container width. 
+    // If we assumed 1000px base, then 42px = 4.2cqw
     return {
-      headline: `${Math.round(headlineBase)}px`,
-      subline: `${Math.round(sublineBase)}px`,
-      banner: `${Math.round(bannerBase)}px`,
-      watermark: isPortrait ? '12px' : '16px'
+      headline: `${(headlineBase / 10).toFixed(2)}cqw`,
+      subline: `${(sublineBase / 10).toFixed(2)}cqw`,
+      banner: `${(bannerBase / 10).toFixed(2)}cqw`,
+      watermark: isPortrait ? '2.5cqw' : '1.8cqw'
     };
   };
 
   const fontSizes = getDynamicFontSizes();
   const styles = getStyleClasses();
 
+  if (hasApiKey === false && data.quality === 'Pro') {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
+          <div className="w-20 h-20 bg-red-600/20 rounded-2xl flex items-center justify-center mx-auto">
+            <Settings className="text-red-500 w-10 h-10 animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-white">Cấu hình API Key</h2>
+            <p className="text-zinc-400 text-sm leading-relaxed">
+              Để sử dụng các mô hình AI cao cấp (Gemini 3.1) cho việc tạo hình ảnh 2K sắc nét, bạn cần chọn một API Key từ dự án Google Cloud có trả phí.
+            </p>
+          </div>
+          <div className="bg-zinc-800/50 p-4 rounded-xl text-left">
+            <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Lưu ý quan trọng:</p>
+            <ul className="text-xs text-zinc-400 space-y-2 list-disc pl-4">
+              <li>Sử dụng API Key từ dự án có thiết lập thanh toán.</li>
+              <li>Xem hướng dẫn tại <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="text-red-500 hover:underline">ai.google.dev/billing</a></li>
+            </ul>
+          </div>
+          <button 
+            onClick={handleSelectKey}
+            className="w-full bg-white text-black py-4 rounded-2xl font-bold text-lg hover:bg-zinc-200 transition-all flex items-center justify-center gap-2"
+          >
+            <Sparkles size={20} />
+            Chọn API Key & Bắt đầu
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-vietnam selection:bg-red-500/30">
       {/* Header */}
       <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center shadow-lg shadow-red-900/20">
-              <Sparkles className="text-white w-6 h-6" />
+        <div className="max-w-7xl mx-auto px-4 md:px-8 h-16 md:h-20 flex items-center justify-between">
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="w-8 h-8 md:w-10 md:h-10 bg-red-600 rounded-lg flex items-center justify-center shadow-lg shadow-red-900/20">
+              <Sparkles className="text-white w-5 h-5 md:w-6 md:h-6" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight">
+            <h1 className="text-lg md:text-xl font-bold tracking-tight">
               Nàng & Thế Giới <span className="text-red-500">Studio</span>
             </h1>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4">
             <button 
               onClick={exportImage}
               disabled={!data.generatedBackground}
-              className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded-full font-semibold text-sm hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 bg-white text-black px-3 md:px-4 py-1.5 md:py-2 rounded-full font-semibold text-xs md:text-sm hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Download size={18} />
-              Xuất PNG
+              <Download size={16} className="md:w-[18px] md:h-[18px]" />
+              <span className="hidden sm:inline">Xuất PNG</span>
+              <span className="sm:hidden">Xuất</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <main className="max-w-7xl mx-auto px-4 md:px-8 py-6 md:py-12 grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-12">
         {/* Left Column: Editor */}
-        <div className="lg:col-span-5 space-y-6">
+        <div className="lg:col-span-5 space-y-8">
           {/* Image Uploaders */}
           <div className="space-y-3">
             <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider block">
@@ -444,6 +524,27 @@ export default function App() {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-2 flex items-center gap-2">
+                  <ImageIcon size={14} /> Chất lượng hình ảnh
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['Standard', 'Pro'] as QualityLevel[]).map(q => (
+                    <button 
+                      key={q}
+                      onClick={() => setData(prev => ({ ...prev, quality: q }))}
+                      className={cn(
+                        "py-2 rounded-lg text-xs font-semibold border transition-all flex flex-col items-center",
+                        data.quality === q ? "bg-white text-black border-white" : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500"
+                      )}
+                    >
+                      <span>{q === 'Standard' ? 'Tiêu chuẩn' : 'Cao cấp (2K)'}</span>
+                      <span className="text-[9px] opacity-60">{q === 'Standard' ? 'Miễn phí' : 'Cần API Key'}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-2 flex items-center gap-2">
                   <Layout size={14} /> Tỉ lệ khung hình
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -539,11 +640,11 @@ export default function App() {
 
         {/* Right Column: Preview */}
         <div className="lg:col-span-7">
-          <div className="sticky top-24 space-y-4">
+          <div className="lg:sticky lg:top-28 space-y-6">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-widest">Xem trước kết quả</h2>
-              <div className="flex items-center gap-2 text-xs text-zinc-400">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <h2 className="text-xs md:text-sm font-semibold text-zinc-500 uppercase tracking-widest">Xem trước kết quả</h2>
+              <div className="flex items-center gap-2 text-[10px] md:text-xs text-zinc-400">
+                <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-green-500 animate-pulse" />
                 Thời gian thực
               </div>
             </div>
@@ -553,7 +654,7 @@ export default function App() {
               <div 
                 ref={previewRef}
                 className={cn(
-                  "w-full overflow-hidden rounded-2xl shadow-2xl bg-zinc-900 relative border border-zinc-800",
+                  "w-full overflow-hidden rounded-2xl shadow-2xl bg-zinc-900 relative border border-zinc-800 [container-type:inline-size]",
                   getAspectRatioClass()
                 )}
               >
@@ -679,15 +780,15 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-zinc-900 py-12 mt-12">
-        <div className="max-w-7xl mx-auto px-4 text-center space-y-4">
-          <p className="text-zinc-600 text-sm">
+      <footer className="border-t border-zinc-900 py-8 md:py-16 mt-12 md:mt-24">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 text-center space-y-6">
+          <p className="text-zinc-600 text-xs md:text-sm">
             &copy; 2026 Nàng & Thế Giới Studio. Phát triển bởi AI Studio.
           </p>
-          <div className="flex items-center justify-center gap-6">
-            <a href="#" className="text-zinc-500 hover:text-white transition-colors"><ImageIcon size={20} /></a>
-            <a href="#" className="text-zinc-500 hover:text-white transition-colors"><Layout size={20} /></a>
-            <a href="#" className="text-zinc-500 hover:text-white transition-colors"><Settings size={20} /></a>
+          <div className="flex items-center justify-center gap-4 md:gap-8">
+            <a href="#" className="text-zinc-500 hover:text-white transition-colors"><ImageIcon size={18} className="md:w-5 md:h-5" /></a>
+            <a href="#" className="text-zinc-500 hover:text-white transition-colors"><Layout size={18} className="md:w-5 md:h-5" /></a>
+            <a href="#" className="text-zinc-500 hover:text-white transition-colors"><Settings size={18} className="md:w-5 md:h-5" /></a>
           </div>
         </div>
       </footer>

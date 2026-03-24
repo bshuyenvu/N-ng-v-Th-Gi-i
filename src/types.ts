@@ -1,5 +1,15 @@
 export type AspectRatio = '16:9' | '4:5' | '9:16';
 export type StylePreset = 'Bình thường' | 'Đỏ Tin Nóng' | 'Trắng Thanh Lịch' | 'Điện Ảnh Tối' | 'Phong Cách Thăm Dò';
+export type QualityLevel = 'Standard' | 'Pro';
+
+declare global {
+  interface Window {
+    aistudio: {
+      hasSelectedApiKey: () => Promise<boolean>;
+      openSelectKey: () => Promise<void>;
+    };
+  }
+}
 
 export interface GraphicData {
   banner: string;
@@ -8,6 +18,7 @@ export interface GraphicData {
   watermark: string;
   aspectRatio: AspectRatio;
   style: StylePreset;
+  quality: QualityLevel;
   images: string[];
   generatedBackground: string | null;
 }

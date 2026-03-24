@@ -7,7 +7,17 @@
 
 @layer base {
   html {
-    font-size: 20px; /* Increased from default 16px to provide a larger base for all rem units */
+    font-size: 16px; /* Standard base size for mobile */
+  }
+  @media (min-width: 768px) {
+    html {
+      font-size: 18px; /* Slightly larger for tablets */
+    }
+  }
+  @media (min-width: 1024px) {
+    html {
+      font-size: 20px; /* Original size for laptops/desktops */
+    }
   }
   body {
     font-family: var(--font-vietnam);
