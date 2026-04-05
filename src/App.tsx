@@ -83,12 +83,12 @@ export default function App() {
       console.log("Starting background generation...");
       const apiKey = process.env.GEMINI_API_KEY;
       
-      if (!apiKey) {
-        throw new Error("Chưa cấu hình API Key hệ thống. Vui lòng kiểm tra cài đặt môi trường.");
-      }
-
       // Create a new instance right before the call to ensure up-to-date API key
-      const genAI = new GoogleGenAI({ apiKey });
+      const genAI = new GoogleGenAI({ apiKey: apiKey || "" });
+      
+      if (!apiKey) {
+        console.warn("GEMINI_API_KEY is missing from environment. AI generation may fail.");
+      }
       
       // Step 1: Translate/Refine text and get visual context
       console.log("Refining text and context...");
