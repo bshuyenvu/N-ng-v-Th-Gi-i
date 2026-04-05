@@ -47,6 +47,10 @@ export const PROMPT_TEMPLATES = [
     prompt: 'A formal, dignified editorial background suitable for political or official statements. Minimalist but powerful. No text, no watermarks.',
   },
   {
+    name: 'Studio News',
+    prompt: 'A high-end, modern news studio interior. Professional broadcasting equipment, soft studio lighting, bokeh background, and a sophisticated newsroom atmosphere. Clean and ready for text overlay.',
+  },
+  {
     name: 'Xung Đột Quốc Tế',
     prompt: 'A dramatic, global-scale news background. High-impact visual storytelling, cinematic and professional. No text, no watermarks.',
   },

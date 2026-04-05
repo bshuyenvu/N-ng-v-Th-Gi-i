@@ -31,8 +31,6 @@ import {
   PROMPT_TEMPLATES 
 } from './types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
 export default function App() {
   const [data, setData] = useState<GraphicData>({
     banner: 'TIN NÓNG',
@@ -51,15 +49,12 @@ export default function App() {
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
-  // Check for API key on mount
+  // Check for API key on mount but don't block the app
   React.useEffect(() => {
     const checkKey = async () => {
       if (window.aistudio) {
         const selected = await window.aistudio.hasSelectedApiKey();
         setHasApiKey(selected);
-      } else {
-        // Fallback for local dev or if window.aistudio is missing
-        setHasApiKey(true);
       }
     };
     checkKey();
@@ -97,7 +92,11 @@ export default function App() {
 
   const [selectedTemplate, setSelectedTemplate] = useState(PROMPT_TEMPLATES[0]);
 
-  const generateBackground = async () => {
+  const generateBackground = async (overrides?: { template?: typeof selectedTemplate, style?: StylePreset, aspectRatio?: AspectRatio }) => {
+    const currentTemplate = overrides?.template || selectedTemplate;
+    const currentStyle = overrides?.style || data.style;
+    const currentAspectRatio = overrides?.aspectRatio || data.aspectRatio;
+    
     setIsGenerating(true);
     setError(null);
 
@@ -113,7 +112,7 @@ export default function App() {
         contents: `Analyze these news elements and:
         1. Translate them into natural, professional Vietnamese if needed.
         2. Provide a very detailed English visual description for an AI image generator based on the content. 
-           If it's a specific event or person, describe their typical appearance and setting.
+        3. If it's a specific event or person, describe their typical appearance and setting.
         
         Return ONLY a JSON object with keys: banner, headline, subline, visualDescription.
         
@@ -149,32 +148,31 @@ export default function App() {
         }
       };
 
-      const isNormalTemplate = selectedTemplate.name === 'Bình thường';
+      const isNormalTemplate = currentTemplate.name === 'Bình thường';
 
-      let promptText = `Generate a high-end, modern news background composition for a professional Vietnamese news channel.
+      let promptText = `Generate a PROFESSIONAL NEWS BROADCAST BACKGROUND for a high-end Vietnamese news channel.
       
-      Visual Style: ${selectedTemplate.prompt}.
-      Topic: ${refined.visualDescription || data.headline}.
-      Atmosphere: ${getStyleDescription(data.style)}.
+      VISUAL STYLE: ${currentTemplate.prompt}.
+      TOPIC: ${refined.visualDescription || data.headline}.
+      ATMOSPHERE: ${getStyleDescription(currentStyle)}.
       
       COMPOSITION STRATEGY:
       ${data.images.length > 0 
-        ? `1. MANDATORY: USE THE PROVIDED UPLOADED IMAGES AS THE PRIMARY VISUAL CONTENT. 
+        ? `1. ABSOLUTE CENTERPIECE: The uploaded images MUST be the primary visual focus and main subject of the composition.
            2. ${isNormalTemplate 
-              ? 'STRICT MODE: Maintain the original subjects and composition of the uploaded images, but enhance them to be significantly sharper, brighter, and more cinematic. Do not add new subjects.' 
-              : 'SMART BLEND MODE: Create a sophisticated, modern news collage or split-screen layout using the uploaded images. Blend them with professional geometric masks, subtle gradients, or modern glassmorphism effects.'}
-           3. Ensure the subjects (people, objects) in the images remain clear, recognizable, and high-fidelity.
-           4. DO NOT hallucinate new people or objects if they aren't in the images.
-           5. The background should feel like a high-budget news broadcast graphic.`
+              ? 'STRICT FIDELITY: Maintain the exact subjects from the uploaded images. Enhance their quality to look like professional news photography—sharper, clearer, and with cinematic studio lighting. DO NOT ADD NEW PEOPLE OR OBJECTS.' 
+              : 'MODERN NEWS COLLAGE: Create a sophisticated, dynamic news layout using the uploaded images. Use professional techniques like split-screens, geometric glassmorphism masks, and subtle depth-of-field effects to blend them into a high-budget news graphic.'}
+           3. Ensure the subjects remain highly recognizable and high-fidelity.
+           4. The background should look like a professional news studio backdrop with soft bokeh, studio lights, and high-end broadcasting elements.`
         : `1. Since no images are provided, generate a cinematic, realistic news visual from scratch based on the topic.
-           2. Use a professional news studio or relevant location background.`
+           2. Use a professional news studio, newsroom, or relevant on-location broadcast setting.`
       }
 
       CRITICAL CONSTRAINTS:
-      - NO TEXT, NO LETTERS, NO NUMBERS, NO WATERMARKS in the generated image.
-      - The output must be a CLEAN background graphic ready for text overlay.
-      - Vietnamese news aesthetic: Professional, trustworthy, and high-energy.
-      - High contrast and vibrant colors matching the ${data.style} style.`;
+      - NO TEXT, NO LETTERS, NO NUMBERS, NO WATERMARKS.
+      - The output must be a CLEAN background graphic ready for professional text overlay.
+      - AESTHETIC: Vietnamese News Broadcast (VTV/HTV style)—Professional, trustworthy, high-energy, and modern.
+      - LIGHTING: Professional studio lighting with high contrast and vibrant colors matching the ${currentStyle} style.`;
       
       parts.push({ text: promptText });
 
@@ -196,7 +194,7 @@ export default function App() {
         contents: { parts },
         config: {
           imageConfig: {
-            aspectRatio: data.aspectRatio === '16:9' ? '16:9' : data.aspectRatio === '4:5' ? '3:4' : '9:16',
+            aspectRatio: currentAspectRatio === '16:9' ? '16:9' : currentAspectRatio === '4:5' ? '3:4' : '9:16',
             imageSize: data.quality === 'Pro' ? "2K" : undefined
           }
         }
@@ -317,15 +315,16 @@ export default function App() {
     const isSquare = data.aspectRatio === '4:5';
     
     // Base sizes (relative to a 1000px wide container for calculation)
-    let headlineBase = isPortrait ? 50 : isSquare ? 45 : 42;
-    let sublineBase = isPortrait ? 24 : isSquare ? 22 : 20;
-    let bannerBase = isPortrait ? 28 : isSquare ? 26 : 24;
+    // Increased base values for portrait/square to ensure readability on narrow screens
+    let headlineBase = isPortrait ? 65 : isSquare ? 55 : 45;
+    let sublineBase = isPortrait ? 32 : isSquare ? 28 : 22;
+    let bannerBase = isPortrait ? 36 : isSquare ? 32 : 26;
 
     // Adjust based on length (longer text = smaller font)
     const headlineLen = data.headline.length;
     if (headlineLen > 150) headlineBase *= 0.5;
     else if (headlineLen > 100) headlineBase *= 0.6;
-    else if (headlineLen > 70) headlineBase *= 0.7;
+    else if (headlineLen > 70) headlineBase *= 0.75;
     else if (headlineLen > 40) headlineBase *= 0.85;
     
     const sublineLen = data.subline.length;
@@ -337,51 +336,18 @@ export default function App() {
     if (bannerLen > 20) bannerBase *= 0.8;
     else if (bannerLen > 15) bannerBase *= 0.9;
 
-    // Convert to cqw (Container Query Width) units
-    // 1cqw = 1% of container width. 
-    // If we assumed 1000px base, then 42px = 4.2cqw
+    // Convert to cqw (Container Query Width) units with clamp for safety
+    // Minimum font sizes are crucial for mobile readability
     return {
-      headline: `${(headlineBase / 10).toFixed(2)}cqw`,
-      subline: `${(sublineBase / 10).toFixed(2)}cqw`,
-      banner: `${(bannerBase / 10).toFixed(2)}cqw`,
-      watermark: isPortrait ? '2.5cqw' : '1.8cqw'
+      headline: `clamp(18px, ${(headlineBase / 10).toFixed(2)}cqw, 80px)`,
+      subline: `clamp(12px, ${(sublineBase / 10).toFixed(2)}cqw, 32px)`,
+      banner: `clamp(14px, ${(bannerBase / 10).toFixed(2)}cqw, 40px)`,
+      watermark: isPortrait ? 'clamp(10px, 3.5cqw, 18px)' : 'clamp(8px, 2.2cqw, 16px)'
     };
   };
 
   const fontSizes = getDynamicFontSizes();
   const styles = getStyleClasses();
-
-  if (hasApiKey === false && data.quality === 'Pro') {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
-          <div className="w-20 h-20 bg-red-600/20 rounded-2xl flex items-center justify-center mx-auto">
-            <Settings className="text-red-500 w-10 h-10 animate-pulse" />
-          </div>
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-white">Cấu hình API Key</h2>
-            <p className="text-zinc-400 text-sm leading-relaxed">
-              Để sử dụng các mô hình AI cao cấp (Gemini 3.1) cho việc tạo hình ảnh 2K sắc nét, bạn cần chọn một API Key từ dự án Google Cloud có trả phí.
-            </p>
-          </div>
-          <div className="bg-zinc-800/50 p-4 rounded-xl text-left">
-            <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">Lưu ý quan trọng:</p>
-            <ul className="text-xs text-zinc-400 space-y-2 list-disc pl-4">
-              <li>Sử dụng API Key từ dự án có thiết lập thanh toán.</li>
-              <li>Xem hướng dẫn tại <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="text-red-500 hover:underline">ai.google.dev/billing</a></li>
-            </ul>
-          </div>
-          <button 
-            onClick={handleSelectKey}
-            className="w-full bg-white text-black py-4 rounded-2xl font-bold text-lg hover:bg-zinc-200 transition-all flex items-center justify-center gap-2"
-          >
-            <Sparkles size={20} />
-            Chọn API Key & Bắt đầu
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-vietnam selection:bg-red-500/30">
@@ -532,15 +498,27 @@ export default function App() {
                       key={q}
                       onClick={() => setData(prev => ({ ...prev, quality: q }))}
                       className={cn(
-                        "py-2 rounded-lg text-xs font-semibold border transition-all flex flex-col items-center",
+                        "py-2 rounded-lg text-xs font-semibold border transition-all flex flex-col items-center relative overflow-hidden",
                         data.quality === q ? "bg-white text-black border-white" : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500"
                       )}
                     >
-                      <span>{q === 'Standard' ? 'Tiêu chuẩn' : 'Cao cấp (2K)'}</span>
-                      <span className="text-[9px] opacity-60">{q === 'Standard' ? 'Miễn phí' : 'Cần API Key'}</span>
+                      <span>{q === 'Standard' ? 'Miễn phí' : 'Cao cấp (2K)'}</span>
+                      <span className="text-[9px] opacity-60">{q === 'Standard' ? 'Gemini 2.5' : 'Gemini 3.1'}</span>
+                      {q === 'Pro' && !hasApiKey && (
+                        <div className="absolute top-0 right-0 bg-red-500 text-[8px] text-white px-1 font-bold">KEY</div>
+                      )}
                     </button>
                   ))}
                 </div>
+                {data.quality === 'Pro' && !hasApiKey && (
+                  <button 
+                    onClick={handleSelectKey}
+                    className="mt-2 w-full flex items-center justify-center gap-2 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-[10px] text-red-400 hover:bg-red-500/20 transition-all"
+                  >
+                    <Settings size={12} />
+                    Chưa cấu hình API Key cho bản Pro. Nhấn để thiết lập.
+                  </button>
+                )}
               </div>
 
               <div>
@@ -551,7 +529,10 @@ export default function App() {
                   {(['16:9', '4:5', '9:16'] as AspectRatio[]).map(ratio => (
                     <button 
                       key={ratio}
-                      onClick={() => setData(prev => ({ ...prev, aspectRatio: ratio }))}
+                      onClick={() => {
+                        setData(prev => ({ ...prev, aspectRatio: ratio }));
+                        generateBackground({ aspectRatio: ratio });
+                      }}
                       className={cn(
                         "py-2 rounded-lg text-xs font-semibold border transition-all",
                         data.aspectRatio === ratio ? "bg-white text-black border-white" : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500"
@@ -571,7 +552,10 @@ export default function App() {
                   {(['Bình thường', 'Đỏ Tin Nóng', 'Trắng Thanh Lịch', 'Điện Ảnh Tối', 'Phong Cách Thăm Dò'] as StylePreset[]).map(preset => (
                     <button 
                       key={preset}
-                      onClick={() => setData(prev => ({ ...prev, style: preset }))}
+                      onClick={() => {
+                        setData(prev => ({ ...prev, style: preset }));
+                        generateBackground({ style: preset });
+                      }}
                       className={cn(
                         "py-2 rounded-lg text-xs font-semibold border transition-all",
                         data.style === preset ? "bg-red-600 text-white border-red-600" : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500"
@@ -591,7 +575,10 @@ export default function App() {
                   {PROMPT_TEMPLATES.map(template => (
                     <button 
                       key={template.name}
-                      onClick={() => setSelectedTemplate(template)}
+                      onClick={() => {
+                        setSelectedTemplate(template);
+                        generateBackground({ template });
+                      }}
                       className={cn(
                         "w-full text-left px-3 py-2 rounded-lg text-xs border transition-all flex items-center justify-between group",
                         selectedTemplate.name === template.name ? "bg-zinc-100 text-black border-white" : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-600"
