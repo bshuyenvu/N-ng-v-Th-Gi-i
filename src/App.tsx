@@ -25,7 +25,6 @@ import { cn } from './lib/utils';
 import { 
   AspectRatio, 
   StylePreset, 
-  QualityLevel,
   GraphicData, 
   PRESET_TEXTS, 
   PROMPT_TEMPLATES 
@@ -39,33 +38,13 @@ export default function App() {
     watermark: '@Nang&TheGioi',
     aspectRatio: '16:9',
     style: 'Bình thường',
-    quality: 'Standard',
     images: [],
     generatedBackground: null,
   });
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
-
-  // Check for API key on mount but don't block the app
-  React.useEffect(() => {
-    const checkKey = async () => {
-      if (window.aistudio) {
-        const selected = await window.aistudio.hasSelectedApiKey();
-        setHasApiKey(selected);
-      }
-    };
-    checkKey();
-  }, []);
-
-  const handleSelectKey = async () => {
-    if (window.aistudio) {
-      await window.aistudio.openSelectKey();
-      setHasApiKey(true); // Assume success per instructions
-    }
-  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []) as File[];
@@ -105,7 +84,7 @@ export default function App() {
       const apiKey = process.env.GEMINI_API_KEY;
       
       if (!apiKey) {
-        throw new Error("Chưa cấu hình API Key. Vui lòng nhấn vào biểu tượng cài đặt (Settings) ở góc trên bên phải hoặc chọn 'Cấu hình API Key' để bắt đầu sử dụng AI miễn phí.");
+        throw new Error("Chưa cấu hình API Key hệ thống. Vui lòng kiểm tra cài đặt môi trường.");
       }
 
       // Create a new instance right before the call to ensure up-to-date API key
@@ -194,14 +173,13 @@ export default function App() {
         });
       });
 
-      console.log(`Generating image with ${data.quality === 'Pro' ? 'Gemini 3.1' : 'Gemini 2.5'}...`);
+      console.log(`Generating image with Gemini 2.5 Flash...`);
       const response = await genAI.models.generateContent({
-        model: data.quality === 'Pro' ? 'gemini-3.1-flash-image-preview' : 'gemini-2.5-flash-image',
+        model: 'gemini-2.5-flash-image',
         contents: { parts },
         config: {
           imageConfig: {
-            aspectRatio: currentAspectRatio === '16:9' ? '16:9' : currentAspectRatio === '4:5' ? '3:4' : '9:16',
-            imageSize: data.quality === 'Pro' ? "2K" : undefined
+            aspectRatio: currentAspectRatio === '16:9' ? '16:9' : currentAspectRatio === '4:5' ? '3:4' : '9:16'
           }
         }
       });
@@ -226,8 +204,7 @@ export default function App() {
       console.error("Generation error:", err);
       const errorMessage = err.message || "";
       if (errorMessage.includes("permission") || errorMessage.includes("403") || errorMessage.includes("not found")) {
-        setError("Lỗi quyền truy cập: Vui lòng chọn lại API Key từ một dự án Google Cloud có trả phí.");
-        setHasApiKey(false); // Reset key state to show selection screen
+        setError("Lỗi quyền truy cập: Vui lòng kiểm tra cấu hình API Key hệ thống.");
       } else {
         setError(`Có lỗi xảy ra: ${errorMessage || "Vui lòng thử lại."}`);
       }
@@ -494,39 +471,6 @@ export default function App() {
             </div>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-2 flex items-center gap-2">
-                  <ImageIcon size={14} /> Chất lượng hình ảnh
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['Standard', 'Pro'] as QualityLevel[]).map(q => (
-                    <button 
-                      key={q}
-                      onClick={() => setData(prev => ({ ...prev, quality: q }))}
-                      className={cn(
-                        "py-2 rounded-lg text-xs font-semibold border transition-all flex flex-col items-center relative overflow-hidden",
-                        data.quality === q ? "bg-white text-black border-white" : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500"
-                      )}
-                    >
-                      <span>{q === 'Standard' ? 'Miễn phí' : 'Cao cấp (2K)'}</span>
-                      <span className="text-[9px] opacity-60">{q === 'Standard' ? 'Gemini 2.5' : 'Gemini 3.1'}</span>
-                      {q === 'Pro' && !hasApiKey && (
-                        <div className="absolute top-0 right-0 bg-red-500 text-[8px] text-white px-1 font-bold">KEY</div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-                {data.quality === 'Pro' && !hasApiKey && (
-                  <button 
-                    onClick={handleSelectKey}
-                    className="mt-2 w-full flex items-center justify-center gap-2 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-[10px] text-red-400 hover:bg-red-500/20 transition-all"
-                  >
-                    <Settings size={12} />
-                    Chưa cấu hình API Key cho bản Pro. Nhấn để thiết lập.
-                  </button>
-                )}
-              </div>
-
               <div>
                 <label className="block text-xs font-medium text-zinc-500 mb-2 flex items-center gap-2">
                   <Layout size={14} /> Tỉ lệ khung hình
